@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JUAPS RefCheck — Public Web App</title>
+<meta name="description" content="Reference checker web app: Crossref + PubMed, duplicates, DOI, missing fields, mismatches, analytics.">
+<style>
+:root{
+  --bg:#0b1020; --card:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5eefc;
+  --accent:#22c55e; --accent2:#06b6d4; --warn:#f59e0b; --err:#ef4444; --ok:#22c55e;
+  --border:#1f2937;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(6,9,20,.9),var(--card));position:sticky;top:0;z-index:10}
+.brand{display:flex;gap:12px;align-items:center}
+.brand .logo{font-size:24px}
+.brand .titles{display:flex;flex-direction:column;line-height:1}
+.brand small{color:var(--muted)}
+.hero{padding:18px 16px;text-align:center;color:var(--muted)}
+.grid{max-width:1200px;margin:0 auto;padding:0 16px 24px;display:grid;gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+.two-col{display:grid;grid-template-columns:1fr 360px;gap:14px}
+.label{display:block;margin-bottom:6px;color:var(--muted)}
+textarea{width:100%;min-height:220px;border-radius:12px;padding:12px;background:var(--panel);color:var(--text);border:1px solid var(--border)}
+.file-box{background:var(--panel);border:1px dashed var(--border);border-radius:12px;padding:14px;text-align:center}
+input[type=file],input[type=number]{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text)}
+.options{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;align-items:center}
+.options label{display:flex;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--muted)}
+.cta{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#00140b;border:0;padding:12px 16px;border-radius:12px;font-weight:700;cursor:pointer}
+.secondary{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}
+.progress{flex:1;min-width:220px;height:10px;background:var(--panel);border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .2s ease}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.stats{color:var(--muted)}
+.table-wrap{overflow:auto;max-height:460px;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse}
+thead th{position:sticky;top:0;background:var(--panel)}
+th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+.badge{padding:2px 8px;border-radius:999px;font-weight:700;font-size:12px;display:inline-block}
+.badge-ok{background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.35)}
+.badge-warn{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.35)}
+.badge-err{background:rgba(239,68,68,.15);color:var(--err);border:1px solid rgba(239,68,68,.35)}
+.kpis{display:flex;flex-wrap:wrap;gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--border);padding:10px 12px;border-radius:12px;min-width:200px}
+.footer{text-align:center;padding:20px;color:var(--muted);border-top:1px solid var(--border);margin-top:20px}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="brand">
+      <span class="logo">📚</span>
+      <div class="titles">
+        <strong>JUAPS RefCheck — Public Web App</strong>
+        <small>Owned by JUAPS • Designed by the Editor-in-Chief: Dr. Thamer Y. Mutter</small>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1 style="margin:6px 0 8px">Reference Accuracy Checker</h1>
+    <div>Paste refs or upload .txt/.csv • Crossref + PubMed • Duplicates • DOI • CSV export • Analytics</div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>1) Load References</h2>
+      <div class="two-col">
+        <div>
+          <label class="label">Paste references (one per line or numbered). You can paste the manuscript tail after “References/Reference/المراجع” — the app auto-detects entries.</label>
+          <textarea id="refText" placeholder="Paste references here..."></textarea>
+        </div>
+        <div class="file-box">
+          <label class="label">Or upload (.txt or .csv)</label>
+          <input id="fileInput" type="file" accept=".txt,.csv">
+          <p class="muted" style="margin:8px 0 0">For public hosting we use .txt/.csv for reliability. (If you paste raw manuscript text, the app will detect the references block.)</p>
+        </div>
+      </div>
+
+      <div class="options">
+        <label><input id="strictMode" type="checkbox" checked> Scopus/Elsevier-level checks</label>
+        <label><input id="pubmedFallback" type="checkbox" checked> Use PubMed fallback</label>
+        <label>Max lookups <input id="concurrency" type="number" value="5" min="1" max="10"></label>
+      </div>
+
+      <div class="cta">
+        <button id="checkBtn" class="primary">Check References</button>
+        <button id="exportBtn" class="secondary">Export CSV</button>
+        <div class="progress"><div id="bar" class="bar"></div></div>
+        <div id="progress" class="muted"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>2) Analytics & Results</h2>
+        <div id="stats" class="stats"></div>
+      </div>
+      <div class="kpis" style="margin-bottom:10px">
+        <div class="kpi"><div class="muted">Total references</div><div id="kTotal" style="font-weight:800;font-size:20px">—</div></div>
+        <div class="kpi"><div class="muted">% last 5 years</div><div id="kLast5" style="font-weight:800;font-size:20px">—</div></div>
+        <div class="kpi"><div class="muted">Top authors (any position)</div><div id="kTopAuthors" style="font-weight:800;font-size:14px;line-height:1.35">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <table id="resultsTable">
+          <thead><tr>
+            <th>#</th><th>Status</th><th>Problems</th><th>Original Reference</th>
+            <th>Detected DOI</th><th>Crossref Title</th><th>Match</th><th>Suggested Correct Citation</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 Journal of University of Anbar for Pure Science (JUAPS). Designed by EIC Dr. Thamer Y. Mutter.</small>
+  </footer>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const resultsBody = $('#resultsTable tbody');
+  const refText = $('#refText');
+  const fileInput = $('#fileInput');
+  const checkBtn = $('#checkBtn');
+  const exportBtn = $('#exportBtn');
+  const progress = $('#progress');
+  const statsDiv = $('#stats');
+  const kTotal = $('#kTotal');
+  const kLast5 = $('#kLast5');
+  const kTopAuthors = $('#kTopAuthors');
+  const concurrencyInput = $('#concurrency');
+  const strictMode = $('#strictMode');
+  const pubmedFallback = $('#pubmedFallback');
+  const bar = $('#bar');
+
+  function extractReferencesSection(text){
+    const heads = [/\\breferences\\s*[:\\-]?\\s*$/im, /\\breference\\s*[:\\-]?\\s*$/im, /\\bbibliography\\s*[:\\-]?\\s*$/im, /\\bالمراجع\\s*[:\\-]?\\s*$/im];
+    const stops = [/\\bappendix\\b/im, /\\bappendices\\b/im, /\\backnowledg?e?ments?\\b/im, /\\bsupplementary(\\s+materials?)?\\b/im, /\\bconflicts?\\s+of\\s+interest\\b/im, /\\bdeclarations?\\b/im];
+    let start = -1;
+    for(const h of heads){
+      const m = text.search(h);
+      if(m !== -1){ start = m + (text.slice(m).match(h)||[{0:''}])[0][0].length; break; }
+    }
+    if(start < 0) start = Math.floor(text.length*0.66);
+    let tail = text.slice(start);
+    for(const s of stops){
+      const m = tail.search(s);
+      if(m !== -1){ tail = tail.slice(0, m); break; }
+    }
+    return tail.trim();
+  }
+
+  function splitRefs(t){
+    if(!t) return [];
+    // allow pasting whole manuscript tail
+    const section = extractReferencesSection(t);
+    const numbered = section.split(/\\n?\\s*(?:\\[\\d+\\]|\\d+\\.)\\s+/g).map(s=>s.trim()).filter(Boolean);
+    const lines = section.split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
+    return numbered.length>1?numbered:(lines.length>1?lines:[section.trim()].filter(Boolean));
+  }
+
+  function detectDOI(s){
+    const m = String(s).match(/\\b(10\\.\\d{4,9}\\/[\\-._;()/:A-Za-z0-9]+)\\b/);
+    return m ? m[1].replace(/\\.?$/,'') : null;
+  }
+  function norm(s){
+    return String(s||'').toLowerCase().replace(/https?:\\/\\/(dx\\.)?doi\\.org\\//g,'').replace(/\\b(10\\.\\d{4,9}\\/[\\-._;()/:a-z0-9]+)\\b/g,' $1 ').replace(/[^a-z0-9]+/g,' ').replace(/\\s+/g,' ').trim();
+  }
+  function tokenSim(a,b){
+    a=norm(a); b=norm(b);
+    const sa=new Set(a.split(' ')), sb=new Set(b.split(' '));
+    let inter=0; for(const t of sa) if(sb.has(t)) inter++;
+    return inter/Math.max(sa.size,sb.size,1);
+  }
+  function parseHeur(s){
+    const doi = detectDOI(s);
+    let title='';
+    const q = s.match(/“([^”]+)”|\\"([^\\"]+)\\"/);
+    if(q) title = q[1]||q[2]||'';
+    if(!title){
+      const parts = s.split('.').map(p=>p.trim()).filter(Boolean);
+      if(parts.length>=2) title = parts[1];
+    }
+    const y = (s.match(/\\b(19|20)\\d{2}\\b/)||['',''])[0];
+    let journal='';
+    const after = title ? (s.split(title)[1]||'') : '';
+    const jTry = after.split(/\\.|,|;/)[0]; if(jTry && jTry.length<120) journal=jTry.trim();
+    // authors (any position): capture front block up to year or first big dot
+    const beforeYear = (s.split(/\\b(19|20)\\d{2}\\b/)[0]||s.split('.')[0]||'');
+    let authors = beforeYear.split(/;|\\band\\b|&|\\s{2,}|\\.,/i).join(',').split(',').map(a=>a.trim()).filter(a=>a.length>1&&a.length<80);
+    return {doi,title,year:y,journal,authors};
+  }
+  function dupes(refs){
+    const seen=new Map(), d=new Set();
+    refs.forEach((r,i)=>{ const k=norm(r); if(seen.has(k)){ d.add(i); d.add(seen.get(k)); } else seen.set(k,i); });
+    for(let i=0;i<refs.length;i++){
+      for(let j=i+1;j<refs.length;j++){
+        if(tokenSim(refs[i],refs[j])>=0.85){ d.add(i); d.add(j); }
+      }
+    }
+    return d;
+  }
+
+  async function crDOI(doi){
+    const url=`https://api.crossref.org/works/${encodeURIComponent(doi)}`;
+    const r = await fetch(url, {mode:'cors'}); if(!r.ok) throw new Error('Crossref DOI lookup failed');
+    return (await r.json()).message;
+  }
+  async function crBib(q){
+    const url=`https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(q)}&rows=5`;
+    const r = await fetch(url, {mode:'cors'}); if(!r.ok) return [];
+    const j = await r.json();
+    return (j.message && j.message.items) || [];
+  }
+  async function pmTitle(t){
+    if(!t) return null;
+    const es = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=3&term=${encodeURIComponent(t)}`);
+    if(!es.ok) return null;
+    const ej = await es.json(); const ids = (ej.esearchresult && ej.esearchresult.idlist) || [];
+    if(!ids.length) return null;
+    const sum = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(',')}`);
+    if(!sum.ok) return null;
+    const sj = await sum.json(); const item = sj.result && sj.result[ids[0]];
+    if(!item) return null;
+    const doi = (item.elocationid||'').match(/10\\.\\S+/)?.[0] || (item.articleids||[]).find(x=>x.idtype==='doi')?.value || '';
+    return { title:item.title||'', journal:item.fulljournalname||item.source||'', year:(item.pubdate||'').slice(0,4), volume:item.volume||'', issue:item.issue||'', pages:item.pages||'', doi };
+  }
+  function suggest(cr){
+    const authors = (cr.author||[]).map(a=>[a.family,a.given].filter(Boolean).join(' ')).join(', ');
+    const title = Array.isArray(cr.title)?(cr.title[0]||''):(cr.title||'');
+    const journal = Array.isArray(cr['container-title'])?(cr['container-title'][0]||''):(cr['container-title']||'');
+    const year = (cr.issued && cr.issued['date-parts'] && cr.issued['date-parts'][0] && cr.issued['date-parts'][0][0]) || '';
+    const vol = cr.volume||''; const issue = cr.issue || (cr['journal-issue']&&cr['journal-issue'].issue)||''; const page = cr.page||'';
+    const doi = cr.DOI?`https://doi.org/${cr.DOI}`:'';
+    const parts=[]; if(authors)parts.push(authors+'.'); if(title)parts.push(title+'.'); if(journal)parts.push(journal);
+    const vi=[]; if(year)vi.push(year); if(vol)vi.push(vol); if(issue)vi.push(`(${issue})`); if(page)vi.push(`:${page}`);
+    if(vi.length)parts.push(vi.join('')); if(doi)parts.push(doi);
+    return parts.join(' ');
+  }
+  function escapeHTML(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  let loadedRefs = [];
+
+  fileInput.addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if(!f) return;
+    const ext = f.name.toLowerCase().split('.').pop();
+    const text = await f.text();
+    if (ext === 'txt'){
+      loadedRefs = splitRefs(text);
+    } else if (ext === 'csv'){
+      const rows = text.split(/\\r?\\n/).filter(Boolean);
+      const cells = rows.map(r=>r.split(','));
+      loadedRefs = (cells[0]||[]).length>1 ? cells.map(r=>r[0].trim()).filter(Boolean) : rows.map(r=>r.trim());
+    } else {
+      alert('Use .txt or .csv');
+      return;
+    }
+    refText.value = loadedRefs.join('\\n');
+  });
+
+  function renderRow(r){
+    const tr=document.createElement('tr');
+    let cls='badge-err';
+    if(r.status && r.status.includes('OK') && !r.status.includes('DUPLICATE')) cls='badge-ok';
+    else if(r.status && (r.status.includes('DUPLICATE')||r.status.includes('MISSING')||r.status.includes('MISMATCH'))) cls='badge-warn';
+    tr.innerHTML = `
+      <td>${r.index??''}</td>
+      <td><span class="badge ${cls}">${r.status??''}</span></td>
+      <td>${(r.problems||[]).join('; ')}</td>
+      <td>${escapeHTML(r.original||'')}</td>
+      <td>${r.doi||''}</td>
+      <td>${escapeHTML(r.cr_title||'')}</td>
+      <td>${r.match_score!=null?r.match_score.toFixed(2):''}</td>
+      <td>${escapeHTML(r.suggested||'')}</td>`;
+    resultsBody.appendChild(tr);
+  }
+
+  checkBtn.addEventListener('click', async () => {
+    const refs = refText.value.trim()? splitRefs(refText.value): loadedRefs;
+    if(!refs.length){ alert('Paste references or upload a file'); return; }
+    const dupIdx = dupes(refs);
+    const total = refs.length;
+    const conc = Math.max(1, Math.min(parseInt(concurrencyInput.value||'5',10), 10));
+    resultsBody.innerHTML='';
+    progress.textContent=`Checking ${total} references...`;
+    bar.style.width='0%';
+    let idx=0,done=0,inflight=0;
+    const results = new Array(total);
+
+    // analytics accumulators
+    const authorCounts = new Map(); // any author position
+    const years = [];
+
+    function addAuthors(list){
+      for(const name of (list||[])){
+        const key = name.trim().replace(/\\s+/g,' ');
+        if(!key) continue;
+        authorCounts.set(key, (authorCounts.get(key)||0)+1);
+      }
+    }
+    function extractAuthorsFromRefString(s){
+      const beforeYear = (s.split(/\\b(19|20)\\d{2}\\b/)[0]||s.split('.')[0]||'');
+      let arr = beforeYear.split(/;|\\band\\b|&|\\s{2,}|\\.,/i).join(',').split(',');
+      arr = arr.map(a=>a.trim()).filter(a=>a && a.length<80);
+      return arr;
+    }
+
+    async function validate(refLine){
+      const p = parseHeur(refLine);
+      let status='OK', problems=[], cr=null, doi=p.doi, match=0, titleCR='';
+      let usedYear = p.year;
+      try{
+        if(doi){
+          cr = await crDOI(doi);
+          titleCR = Array.isArray(cr.title)?(cr.title[0]||''):(cr.title||'');
+          match = p.title? tokenSim(p.title, titleCR) : 0;
+
+          const crAuthors = (cr.author||[]).map(a=>[a.family,a.given].filter(Boolean).join(' '));
+          addAuthors(crAuthors.length?crAuthors:extractAuthorsFromRefString(refLine));
+          const cy = (cr.issued && cr.issued['date-parts'] && cr.issued['date-parts'][0] && cr.issued['date-parts'][0][0]) || '';
+          usedYear = cy || p.year;
+          if(usedYear) years.push(+String(usedYear).slice(0,4));
+
+          if(strictMode.checked){
+            if(p.title && match<0.72){ status='MISMATCH'; problems.push(`Title mismatch vs Crossref (sim=${match.toFixed(2)})`); }
+            if(p.journal){
+              const jr = Array.isArray(cr['container-title'])?(cr['container-title'][0]||''):(cr['container-title']||'');
+              const js = tokenSim(p.journal, jr);
+              if(js<0.70){ status = status==='OK'?'MISMATCH':status; problems.push(`Journal mismatch (sim=${js.toFixed(2)})`); }
+            }
+            const miss=[]; // volume/pages heuristics available in pasted text only
+            if(!p.title){} // keep simple
+            if(miss.length){ status = status==='OK'?'MISSING':`${status} + MISSING`; problems.push('Missing fields: '+miss.join(', ')); }
+          }
+          return { status, problems, doi: cr.DOI || doi, cr_title: titleCR, match_score: match, suggested: suggest(cr) };
+        } else {
+          const bib = [p.title,p.journal].concat(p.authors||[]).concat([p.year]).filter(Boolean).join(' ');
+          const items = await crBib(bib || refLine);
+          let best = items[0], bestScore = 0;
+          if(p.title && items.length){
+            for(const it of items){
+              const s = tokenSim(p.title, Array.isArray(it.title)?(it.title[0]||''):(it.title||''));
+              if(s>bestScore){ bestScore=s; best=it; }
+            }
+          }
+          if(!best && pubmedFallback.checked){
+            const pm = await pmTitle(p.title || refLine);
+            if(pm){
+              status='MISSING'; problems.push('DOI missing; found via PubMed');
+              addAuthors(extractAuthorsFromRefString(refLine));
+              if(pm.year) years.push(+String(pm.year).slice(0,4));
+              return { status, problems, doi: pm.doi||'', cr_title: pm.title||'', match_score: p.title? tokenSim(p.title, pm.title||'') : 0,
+                suggested: [pm.title, pm.journal, pm.year||'', pm.volume||'', pm.issue?`(${pm.issue})`:'', pm.pages?`:${pm.pages}`:'', pm.doi?` https://doi.org/${pm.doi}`:''].join(' ').replace(/\\s+/g,' ').trim() };
+            }
+            status='ERROR'; problems.push('Not found in Crossref or PubMed');
+            addAuthors(extractAuthorsFromRefString(refLine));
+            if(p.year) years.push(+String(p.year).slice(0,4));
+            return { status, problems, doi:'', cr_title:'', match_score:0, suggested:'' };
+          }
+          if(!best){
+            status='ERROR'; problems.push('Not found in Crossref');
+            addAuthors(extractAuthorsFromRefString(refLine));
+            if(p.year) years.push(+String(p.year).slice(0,4));
+            return { status, problems, doi:'', cr_title:'', match_score:0, suggested:'' };
+          }
+          const crAuthors = (best.author||[]).map(a=>[a.family,a.given].filter(Boolean).join(' '));
+          addAuthors(crAuthors.length?crAuthors:extractAuthorsFromRefString(refLine));
+          const by = (best.issued && best.issued['date-parts'] && best.issued['date-parts'][0] && best.issued['date-parts'][0][0]) || '';
+          usedYear = by || p.year;
+          if(usedYear) years.push(+String(usedYear).slice(0,4));
+          if(strictMode.checked){
+            if(p.title){
+              const s = tokenSim(p.title, Array.isArray(best.title)?(best.title[0]||''):(best.title||''));
+              if(s<0.72){ status='MISMATCH'; problems.push(`Title mismatch vs Crossref (sim=${s.toFixed(2)})`); }
+            }
+            if(p.journal){
+              const jr = Array.isArray(best['container-title'])?(best['container-title'][0]||''):(best['container-title']||'');
+              const js = tokenSim(p.journal, jr);
+              if(js<0.70){ status = status==='OK'?'MISMATCH':status; problems.push(`Journal mismatch (sim=${js.toFixed(2)})`); }
+            }
+          }
+          return { status, problems, doi: best.DOI || '', cr_title: (best.title&&best.title[0])||'', match_score: p.title? tokenSim(p.title, (best.title&&best.title[0])||'') : 0, suggested: suggest(best) };
+        }
+      } catch(e){
+        addAuthors(extractAuthorsFromRefString(refLine));
+        if(p.year) years.push(+String(p.year).slice(0,4));
+        return { status:'ERROR', problems:[e.message], doi:'', cr_title:'', match_score:0, suggested:'' };
+      }
+    }
+
+    async function worker(i){
+      const ref = refs[i];
+      const enriched = await validate(ref);
+      if(dupIdx.has(i)){
+        enriched.status = enriched.status==='OK' ? 'DUPLICATE' : (enriched.status + ' + DUPLICATE');
+        enriched.problems = enriched.problems || [];
+        enriched.problems.push('Duplicate reference');
+      }
+      const row = Object.assign({ index:i+1, original:ref }, enriched);
+      results[i] = row;
+      done++;
+      bar.style.width = Math.round(100*done/total) + '%';
+      progress.textContent = `Progress: ${done}/${total}`;
+      renderRow(row);
+    }
+    function spawn(){ while(inflight<conc && idx<total){ inflight++; worker(idx).then(()=>{ inflight--; spawn(); }); idx++; } }
+    spawn();
+    await new Promise(res=>{ const t=setInterval(()=>{ if(done===total){clearInterval(t); res();}}, 200); });
+
+    // Summary stats
+    const ok = results.filter(r => r.status && r.status.includes('OK') && !r.status.includes('DUPLICATE')).length;
+    const dupCount = results.filter(r => r.status && r.status.includes('DUPLICATE')).length;
+    const issues = results.filter(r => r.status && (r.status.includes('ERROR') || r.status.includes('MISMATCH') || r.status.includes('MISSING'))).length;
+    statsDiv.innerHTML = `<span class="badge badge-ok">OK: ${ok}</span> <span class="badge badge-warn">Duplicates: ${dupCount}</span> <span class="badge badge-err">Issues: ${issues}</span>`;
+    kTotal.textContent = String(total);
+
+    // % last 5 years
+    const now = new Date().getFullYear();
+    const recent = years.filter(y => y && y>=now-4 && y<=now).length;
+    const pct = Math.round(10000 * (recent/Math.max(total,1))) / 100;
+    kLast5.textContent = `${recent} (${pct}%)`;
+
+    // author histogram (any position)
+    const top = Array.from(authorCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    kTopAuthors.textContent = top.length ? top.map(([n,c])=>`${n}: ${c}`).join(' • ') : '—';
+
+    // export
+    exportBtn.onclick = () => {
+      const headers = ['index','status','problems','original','doi','crossref_title','match_score','suggested_citation'];
+      const lines = [headers.join(',')];
+      for(const r of results){
+        const row = [
+          r.index,
+          csvEsc(r.status||''),
+          csvEsc((r.problems||[]).join('; ')),
+          csvEsc(r.original||''),
+          csvEsc(r.doi||''),
+          csvEsc(r.cr_title||''),
+          r.match_score!=null ? r.match_score.toFixed(2) : '',
+          csvEsc(r.suggested||'')
+        ];
+        lines.push(row.join(','));
+      }
+      const blob = new Blob([lines.join('\\n')], { type:'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'juaps-refcheck-report.csv';
+      document.body.appendChild(a);
+      a.click(); a.remove();
+    };
+  });
+
+  function csvEsc(s){
+    s = String(s||'');
+    if (s.includes('"') || s.includes(',') || s.includes('\\n')){
+      return '"' + s.replace(/"/g,'""') + '"';
+    }
+    return s;
+  }
+})();
+</script>
+</body>
+</html>
